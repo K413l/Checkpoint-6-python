@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 import oracledb
 
 app = Flask(__name__)
-conn = oracledb.connect('seu_usuario/sua_senha@localhost:1521/seu_banco_de_dados')
+conn = oracledb.connect(user = 'RM550620',password = '130400',dsn = 'oracle.fiap.com.br/orcl') 
 cursor = conn.cursor()
 
 # Rotas da API
@@ -155,8 +155,8 @@ def inserir_atualizar_medalha(medalha):
         # Inserir ou atualizar o país na tabela de países
         cursor.execute("""
             INSERT INTO paises (nome) VALUES (:pais) ON DUPLICATE KEY UPDATE id=id RETURNING id INTO :pais_id
-        """, {'pais': medalha['pais'].lower(), 'pais_id': cursor.var(cx_Oracle.NUMBER)})
-        pais_id = cursor.var(cx_Oracle.NUMBER)
+        """, {'pais': medalha['pais'].lower(), 'pais_id': cursor.var(oracledb.NUMBER)})
+        pais_id = cursor.var(oracledb.NUMBER)
         cursor.execute("SELECT id INTO :pais_id FROM paises WHERE nome = :pais", {'pais': medalha['pais'].lower()})
         pais_id = pais_id.getvalue()
 
