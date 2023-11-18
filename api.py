@@ -94,40 +94,86 @@ def adicionar_medalha():
     inserir_atualizar_medalha(medalha)
     return jsonify({"message": "Medalha adicionada com sucesso!"}), 201
 
-@app.route('/medalhas/<int:id_medalha>', methods=['PUT'])
-def atualizar_medalha(id_medalha):
-    medalha = request.get_json()
-    # Adicione lógica para atualizar a medalha com o ID fornecido
-    # ...
-    return jsonify({"message": "Medalha atualizada com sucesso!"})
+def atualizar_medalha_banco(id_medalha, nova_medalha):
+    try:
+        # Verifica se a medalha existe
+        cursor.execute("SELECT * FROM medalhas WHERE id = :id", {'id': id_medalha})
+        medalha = cursor.fetchone()
+
+        if medalha:
+            # Atualiza a medalha
+            cursor.execute("""
+                UPDATE medalhas
+                SET modalidade = :modalidade, genero = :genero,
+                    pais_id = :pais_id, atletas = :atletas, medalha = :medalha
+                WHERE id = :id
+            """, {
+                'id': id_medalha,
+                'modalidade': nova_medalha.get('modalidade', medalha[1]),
+                'genero': nova_medalha.get('genero', medalha[2]),
+                'pais_id': medalha[3],  # Não permite a alteração do país
+                'atletas': ', '.join(nova_medalha.get('atletas', medalha[5])),
+                'medalha': nova_medalha.get('medalha', medalha[6])
+            })
+            conn.commit()
+            return jsonify({"message": "Medalha atualizada com sucesso!"})
+        else:
+            raise Exception("Medalha não encontrada.")
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        conn.close()
 
 @app.route('/medalhas/<int:id_medalha>', methods=['DELETE'])
 def deletar_medalha(id_medalha):
-    # Adicione lógica para excluir a medalha com o ID fornecido
-    # ...
-    return jsonify({"message": "Medalha deletada com sucesso!"})
+    try:
+        # Verifica se a medalha existe
+        cursor.execute("SELECT * FROM medalhas WHERE id = :id", {'id': id_medalha})
+        medalha = cursor.fetchone()
+
+        if medalha:
+            # Exclui a medalha
+            cursor.execute("DELETE FROM medalhas WHERE id = :id", {'id': id_medalha})
+            conn.commit()
+            return jsonify({"message": "Medalha deletada com sucesso!"})
+        else:
+            return jsonify({"error": "Medalha não encontrada."}), 404
+    except Exception as e:
+        conn.rollback()
+        return jsonify({"error": str(e)}), 500
+    finally:
+        conn.close()
 
 # Função para inserir ou atualizar uma medalha no banco de dados
 def inserir_atualizar_medalha(medalha):
-    # Implemente a lógica para gerar o ID da medalha
-    # ...
+    try:
+        # Gerar o próximo valor da sequência para o ID da medalha
+        cursor.execute("SELECT seq_medalha.NEXTVAL FROM DUAL")
+        medalha_id = cursor.fetchone()[0]
 
-    # Inserir ou atualizar o país na tabela de países
-    cursor.execute("""
-        INSERT INTO paises (nome) VALUES (:pais) ON DUPLICATE KEY UPDATE id=id RETURNING id INTO :pais_id
-    """, {'pais': medalha['pais'].lower(), 'pais_id': cursor.var(oracledb.NUMBER)})
-    pais_id = cursor.var(oracledb.NUMBER)
-    cursor.execute("SELECT id INTO :pais_id FROM paises WHERE nome = :pais", {'pais': medalha['pais'].lower()})
-    pais_id = pais_id.getvalue()
+        # Inserir ou atualizar o país na tabela de países
+        cursor.execute("""
+            INSERT INTO paises (nome) VALUES (:pais) ON DUPLICATE KEY UPDATE id=id RETURNING id INTO :pais_id
+        """, {'pais': medalha['pais'].lower(), 'pais_id': cursor.var(cx_Oracle.NUMBER)})
+        pais_id = cursor.var(cx_Oracle.NUMBER)
+        cursor.execute("SELECT id INTO :pais_id FROM paises WHERE nome = :pais", {'pais': medalha['pais'].lower()})
+        pais_id = pais_id.getvalue()
 
-    # Inserir a medalha na tabela de medalhas
-    cursor.execute("""
-        INSERT INTO medalhas (id, modalidade, genero, pais_id, atletas, medalha)
-        VALUES (:id, :modalidade, :genero, :pais_id, :atletas, :medalha)
-    """, {'id': 1, 'modalidade': medalha['modalidade'], 'genero': medalha['genero'],
-          'pais_id': pais_id, 'atletas': ', '.join(medalha['atletas']), 'medalha': medalha['medalha']})
+        # Inserir a medalha na tabela de medalhas
+        cursor.execute("""
+            INSERT INTO medalhas (id, modalidade, genero, pais_id, atletas, medalha)
+            VALUES (:id, :modalidade, :genero, :pais_id, :atletas, :medalha)
+        """, {'id': medalha_id, 'modalidade': medalha['modalidade'], 'genero': medalha['genero'],
+              'pais_id': pais_id, 'atletas': ', '.join(medalha['atletas']), 'medalha': medalha['medalha']})
 
-# ... (funções auxiliares aqui)
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        conn.close()
+
 
 if __name__ == '__main__':
     app.run(debug=True)
